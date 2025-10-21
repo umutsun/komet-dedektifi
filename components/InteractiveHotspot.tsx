@@ -10,15 +10,17 @@ interface InteractiveHotspotProps {
   label: string;
   onClick: () => void;
   variant?: 'astrobot' | 'telescope';
+  hotspotId?: number; // Sürükle-bırak tanımlaması için eklendi
 }
 
-const InteractiveHotspot: React.FC<InteractiveHotspotProps> = ({ x, y, label, onClick, variant = 'astrobot' }) => {
+const InteractiveHotspot: React.FC<InteractiveHotspotProps> = ({ x, y, label, onClick, variant = 'astrobot', hotspotId }) => {
   const isTelescope = variant === 'telescope';
 
   return (
     <div 
       className="absolute transform -translate-x-1/2 -translate-y-1/2"
       style={{ top: `${y}%`, left: `${x}%` }}
+      data-hotspot-id={hotspotId}
     >
       <button 
         onClick={onClick} 

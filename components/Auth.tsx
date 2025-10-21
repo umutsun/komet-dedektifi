@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 import React, { useState } from 'react';
-import { GoogleIcon } from './icons';
+import { GoogleIcon, AdamIcon, EveIcon } from './icons';
 import HalLoadingCube from './HalLoadingCube';
 import { signInWithGoogle } from '../services/firebaseService';
 import { firebaseConfig } from '../firebaseConfig';
@@ -26,8 +26,8 @@ const Auth: React.FC = () => {
       if (err && typeof err === 'object' && 'code' in err) {
         const firebaseError = err as { code: string; message: string };
         if (firebaseError.code === 'auth/unauthorized-domain') {
-          if (!window.location.hostname) {
-             errorMessage = 'Uygulama yerel bir dosyadan çalıştırılıyor gibi görünüyor. Firebase kimlik doğrulaması için uygulamanın bir web sunucusu (örneğin localhost) üzerinden sunulması gerekir. Lütfen uygulamanızı bir sunucu üzerinden çalıştırın ve ardından o alan adını (örneğin "localhost") Firebase yetkili alan adlarınıza ekleyin.';
+          if (!window.location.hostname || window.location.hostname === 'localhost') {
+             errorMessage = `Bu uygulamanın alan adı (${window.location.hostname}) Firebase projenizde yetkilendirilmemiş. Lütfen aşağıdaki düğmeyi kullanarak Firebase projenizin kimlik doğrulama ayarlarına gidin ve 'Yetkili alan adları' listesine 'localhost' ekleyin.`;
           } else {
              errorMessage = 'Bu uygulamanın alan adı Firebase projenizde yetkilendirilmemiş.';
           }
@@ -55,9 +55,20 @@ const Auth: React.FC = () => {
             <div className="stars stars-3"></div>
         </div>
         <HalLoadingCube />
+
+        {/* Character Visuals */}
+        <div className="absolute inset-0 flex items-center justify-between px-4 md:px-16 lg:px-32 xl:px-64 pointer-events-none z-0">
+            <div className="animate-float" style={{'--float-offset': '-15px'} as React.CSSProperties}>
+                <AdamIcon className="w-48 h-48 md:w-64 md:h-64 text-slate-700 opacity-30" type="A" color="#00ffff" />
+            </div>
+            <div className="animate-float" style={{'--float-offset': '15px', animationDelay: '3s'} as React.CSSProperties}>
+                <EveIcon className="w-48 h-48 md:w-64 md:h-64 text-slate-700 opacity-30" type="B" color="#ff00ff" />
+            </div>
+        </div>
+
       <div className="w-full max-w-sm bg-slate-900/50 backdrop-blur-sm border border-blue-500/20 rounded-lg p-8 text-center relative z-10">
         <h1 className="text-2xl font-bold tracking-widest uppercase mb-2 text-blue-400">
-          // BAĞLANTI_KURULUYOR
+          // KOMET DEDEKTİFİ
         </h1>
         <p className="text-slate-400 mb-6">Devam etmek için kimliğinizi doğrulayın.</p>
         

@@ -36,6 +36,24 @@ const HudDisplay: React.FC<{ title: string; data: { label: string; value: string
     );
 };
 
+const NoSignalView = () => (
+    <div className="w-full h-full flex flex-col items-center justify-center text-center text-slate-500 p-4">
+        <pre className="text-yellow-300/50 text-xs leading-tight animate-pulse mb-4" aria-hidden="true">
+{`
+       //
+      ( )
+   ,..;'-'--.
+  ///(     )
+  ' \\/     )
+     '-----'
+`}
+        </pre>
+        <p className="text-base tracking-widest text-slate-400">[ GÖRÜNTÜ BEKLENİYOR ]</p>
+        <p className="text-xs mt-2 text-slate-500">// HAL'e bir görüntü oluşturma komutu verin.</p>
+    </div>
+);
+
+
 const TelescopeView: React.FC<TelescopeViewProps> = ({ imageUrl, isGenerating, isInitializing, prompt: imagePrompt, interpretedData, isInterpretingData, hotspots, onHotspotClick }) => {
   const [isImageLoading, setIsImageLoading] = useState(true);
 
@@ -71,10 +89,20 @@ const TelescopeView: React.FC<TelescopeViewProps> = ({ imageUrl, isGenerating, i
 
   const showLoader = isInitializing || (isGenerating && !imageUrl) || (imageUrl && isImageLoading);
 
+  let loadingText = '';
+  if (isInitializing) {
+    loadingText = '[ GÖREV VERİLERİ YÜKLENİYOR... ]';
+  } else if (isGenerating) {
+    loadingText = '[ TELESKOP GÖRÜNTÜSÜ OLUŞTURULUYOR... ]';
+  } else if (imageUrl && isImageLoading) {
+    loadingText = '[ GÖRÜNTÜ İŞLENİYOR... ]';
+  }
+
+
   return (
       <div className="flex flex-col h-full text-slate-300">
         <div className="flex-grow relative flex items-center justify-center overflow-hidden bg-black">
-          {showLoader && <CosmicLoading text="" />}
+          {showLoader && <CosmicLoading text={loadingText} variant="telescope" />}
           
           {imageUrl ? (
             <div 
@@ -111,6 +139,7 @@ const TelescopeView: React.FC<TelescopeViewProps> = ({ imageUrl, isGenerating, i
               {!showLoader && hotspots && onHotspotClick && hotspots.map(hotspot => (
                 <InteractiveHotspot
                   key={hotspot.id}
+                  hotspotId={hotspot.id}
                   x={hotspot.x}
                   y={hotspot.y}
                   label={hotspot.label}
@@ -121,12 +150,7 @@ const TelescopeView: React.FC<TelescopeViewProps> = ({ imageUrl, isGenerating, i
 
             </div>
           ) : (
-            !isGenerating && !isInitializing && (
-                <div className="text-center text-slate-500 p-4">
-                  <p className="text-base tracking-widest">[ ANA GÖRÜNTÜLEME EKRANI ]</p>
-                  <p className="text-xs mt-2">// Komut istemi aracılığıyla bir hedef belirleyin.</p>
-                </div>
-            )
+            !isGenerating && !isInitializing && <NoSignalView />
           )}
         </div>
         

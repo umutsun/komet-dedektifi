@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
 */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useState, useRef} from 'react';
 import { User as FirebaseUser } from "firebase/auth";
 import TelescopeView from './components/TelescopeView';
 import {missionData} from './missions';
@@ -19,13 +19,13 @@ import {
   generateInitialMissionData
 } from './services/geminiService';
 import { getSmallBodyData } from './services/nasaService';
-import {AppState, User, Ship, InterpretedData, InterpretedCommand, MissionStep, CaptainLogEntry, PlayerAsset, TelescopeHotspot} from './types';
+import {AppState, User, Ship, InterpretedData, InterpretedCommand, MissionStep, CaptainLogEntry, PlayerAsset, TelescopeHotspot, PlayerProfile} from './types';
 import MissionCompleteView from './components/MissionCompleteView';
 import AstrobotView from './components/AstrobotView';
 import HalConsole from './components/HalConsole';
 import ToplantiView from './components/ToplantiView';
 import PlayerAvatar from './components/PlayerAvatar';
-import { onAuthStateChanged, getUserProfile, getMissions, getShip, saveConversationHistory, saveLogEntry, isFirebaseConfigured, updateUserProfile, listenToLogEntries, listenToPlayerAssets, savePlayerAsset } from './services/firebaseService';
+import { onAuthStateChanged, getUserProfile, getMissions, getShip, saveConversationHistory, saveLogEntry, isFirebaseConfigured, updateUserProfile, listenToLogEntries, listenToPlayerAssets, savePlayerAsset, createUserProfile } from './services/firebaseService';
 import AdminPanel from './components/AdminPanel';
 import { WifiIcon } from './components/icons';
 import SeyirDefteriView from './components/SeyirDefteriView';
@@ -35,10 +35,13 @@ import HalLoadingCube from './components/HalLoadingCube';
 import CosmosView from './components/CosmosView';
 import UserProfileModal from './components/UserProfileModal';
 import FirebaseSetupPrompt from './components/FirebaseSetupPrompt';
+import ProfileSetup from './components/ProfileSetup';
+import AstrobotWidget from './components/AstrobotWidget';
 
+const ADMIN_UIDS = ['YOUR_ADMIN_UID_HERE']; // Gerçek admin UID'nizi buraya ekleyin
 
 type PanelId = 'TELESKOP' | 'ASTROBOT' | 'KOZMOS' | 'TOPLANTI' | 'SEYİR DEFTERİ';
-type ViewState = 'SETUP_REQUIRED' | 'AUTH' | 'SHIP_SELECTION' | 'GAME' | 'LOADING';
+type ViewState = 'SETUP_REQUIRED' | 'AUTH' | 'PROFILE_SETUP' | 'SHIP_SELECTION' | 'GAME' | 'LOADING';
 
 // --- Accordion Component ---
 const AccordionItem: React.FC<{ title: string; panelId: PanelId; isOpen: boolean; onToggle: (panelId: PanelId | null) => void; children: React.ReactNode; }> = ({ title, panelId, isOpen, onToggle, children }) => {
@@ -73,6 +76,7 @@ function App() {
 
   const [openPanel, setOpenPanel] = useState<PanelId | null>('TELESKOP');
   
+  const telescopePanelRef = useRef<HTMLDivElement>(null);
   const [telescopeImage, setTelescopeImage] = useState<string | null>(null);
   const [telescopePrompt, setTelescopePrompt] = useState('');
   const [telescopeHotspots, setTelescopeHotspots] = useState<TelescopeHotspot[]>([]);
@@ -89,19 +93,38 @@ function App() {
   const [confirmationRequest, setConfirmationRequest] = useState<InterpretedCommand | null>(null);
   
   // Admin & UI State
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [firebaseUserForSetup, setFirebaseUserForSetup] = useState<FirebaseUser | null>(null);
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+
 
   const [logEntries, setLogEntries] = useState<CaptainLogEntry[]>([]);
   const [playerAssets, setPlayerAssets] = useState<PlayerAsset[]>([]);
 
   const isProcessing = appState === AppState.LOADING || appState === AppState.GENERATING_IMAGE || appState === AppState.GENERATING_VIDEO || isInterpreting || isInitializing;
   
-  const startOfflineMode = () => {
+  const startOfflineMode = (asAdmin = false) => {
     console.warn("Firebase yapılandırılmamış. Uygulama çevrimdışı modda çalışıyor.");
+    // Developer mode bypass for localhost
+    if (window.location.hostname === 'localhost' && !currentUser) {
+        console.log("// DEV MODE: Admin bypass enabled.");
+        const dummyAdmin: User = { uid: 'admin_user', name: 'Admin', gender: 'male', avatar: {type: 'A', color: '#ff0000'}, currentShipId: 'dev_ship' };
+        const dummyShip: Ship = { id: 'dev_ship', name: 'Dev Ship', captainId: 'admin_user', crew: ['admin_user'], currentMissionId: missionData[0].id, conversationHistory: [], logEntries: [], playerAssets: [] };
+        setCurrentUser(dummyAdmin);
+        setCurrentShip(dummyShip);
+        setIsAdmin(true);
+        setViewState('GAME');
+        return;
+    }
+
+    const uid = asAdmin ? 'admin_user' : 'local_user';
+    const name = asAdmin ? 'Admin' : 'Kaptan';
+    
     const dummyUser: User = {
-        uid: 'local_user',
-        name: 'Kaptan',
+        uid,
+        name,
         gender: 'male',
         avatar: { type: 'A', color: '#00ffff' },
         currentShipId: 'local_ship',
@@ -109,8 +132,8 @@ function App() {
     const dummyShip: Ship = {
         id: 'local_ship',
         name: 'Odyssey (Çevrimdışı)',
-        captainId: 'local_user',
-        crew: ['local_user'],
+        captainId: uid,
+        crew: [uid],
         currentMissionId: 'mission-1',
         conversationHistory: [],
         logEntries: [],
@@ -119,20 +142,39 @@ function App() {
 
     setCurrentUser(dummyUser);
     setCurrentShip(dummyShip);
+    if(asAdmin) setIsAdmin(true);
     setViewState('GAME');
   };
 
   // --- Auth & Profile Loading Effect ---
   useEffect(() => {
     if (!isFirebaseConfigured) {
+        // Allow developer bypass even if firebase isn't configured
+        if (window.location.hostname === 'localhost') {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('admin') === 'true') {
+                 startOfflineMode(true);
+                 return;
+            }
+        }
         setViewState('SETUP_REQUIRED');
         return;
     }
+    
+    // Developer mode bypass for localhost
+    if (window.location.hostname === 'localhost' && !currentUser) {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('admin') === 'true') {
+            startOfflineMode(true);
+            return;
+        }
+    }
       
     const unsubscribe = onAuthStateChanged(async (firebaseUser: FirebaseUser | null) => {
-        setViewState('LOADING'); // Set loading state immediately
+        setViewState('LOADING');
         if (firebaseUser) {
             console.log(`// Auth state changed: User found (UID: ${firebaseUser.uid}). Veri yükleniyor...`);
+            setIsAdmin(ADMIN_UIDS.includes(firebaseUser.uid));
             try {
                 const userProfile = await getUserProfile(firebaseUser.uid);
                 if (userProfile) {
@@ -153,10 +195,11 @@ function App() {
                         setViewState('SHIP_SELECTION');
                     }
                 } else {
-                    console.warn(`// Firebase kullanıcısı var ama profil bulunamadı (UID: ${firebaseUser.uid}). Oturum açma ekranına yönlendiriliyor.`);
+                    console.log(`// Firebase kullanıcısı var ama profil bulunamadı (UID: ${firebaseUser.uid}). Profil oluşturmaya yönlendiriliyor.`);
+                    setFirebaseUserForSetup(firebaseUser);
                     setCurrentUser(null);
                     setCurrentShip(null);
-                    setViewState('AUTH'); 
+                    setViewState('PROFILE_SETUP');
                 }
             } catch (error) {
                 console.error("// Profil veya gemi bilgileri yüklenirken kritik hata:", error);
@@ -166,6 +209,8 @@ function App() {
             }
         } else {
             console.log("// Auth state changed: Kullanıcı bulunamadı. Oturum açma ekranına yönlendiriliyor.");
+            setIsAdmin(false);
+            setFirebaseUserForSetup(null);
             setCurrentUser(null);
             setCurrentShip(null);
             setViewState('AUTH');
@@ -203,7 +248,6 @@ function App() {
   const addLogEntry = async (author: string, content: string) => {
     if (!currentUser || !currentShip || !content.trim()) return;
     if (!isFirebaseConfigured) {
-        // Handle offline logging
         const newEntry: CaptainLogEntry = {
             id: `log-${Date.now()}`,
             timestamp: Date.now(),
@@ -286,13 +330,37 @@ function App() {
     await addLogEntry(currentUser.name, content);
   };
   
-  const handleSaveProfile = async (updatedProfile: Partial<Pick<User, 'name' | 'avatar'>>) => {
+  const handleProfileCreated = async (profile: PlayerProfile) => {
+    if (!firebaseUserForSetup) return;
+    setIsCreatingProfile(true);
+    setError(null);
+    try {
+        await createUserProfile(firebaseUserForSetup, profile.name, profile.gender, profile.avatar);
+        const newUserProfile = await getUserProfile(firebaseUserForSetup.uid);
+        if (newUserProfile) {
+            setCurrentUser(newUserProfile);
+            setViewState('SHIP_SELECTION');
+        } else {
+            throw new Error("Profil oluşturuldu ancak alınamadı.");
+        }
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Profil oluşturulamadı.';
+        setError(errorMessage);
+        console.error("// Profil oluşturulurken hata:", error);
+    } finally {
+        setIsCreatingProfile(false);
+        setFirebaseUserForSetup(null);
+    }
+  };
+
+  const handleSaveProfile = async (updatedProfile: Partial<Pick<User, 'name' | 'gender' | 'avatar'>>) => {
     if (!currentUser) return;
     try {
+        const newProfile = { ...currentUser, ...updatedProfile };
         if (isFirebaseConfigured) {
             await updateUserProfile(currentUser.uid, updatedProfile);
         }
-        setCurrentUser(prevUser => prevUser ? { ...prevUser, ...updatedProfile } : null);
+        setCurrentUser(newProfile);
         setIsProfileModalOpen(false);
         const profileUpdateMsg = '// HAL: Kaptan profili güncellendi.';
         await addMessageToHistory('model', profileUpdateMsg);
@@ -381,6 +449,8 @@ function App() {
         }
     } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'Bilinmeyen bir hata oluştu.';
+        setError(errorMessage);
+        console.error("Execute command error:", e);
         const halErrorResponse = await generateHalErrorResponse(errorMessage, currentUser.name);
         await addMessageToHistory('model', halErrorResponse);
     } finally {
@@ -420,9 +490,35 @@ function App() {
   const handleHotspotClick = (prompt: string) => {
     if (isProcessing) return;
     setConsolePrompt(prompt);
-    handleGenerate(prompt);
   };
   
+  const handleAstrobotDrop = (x: number, y: number) => {
+    if (!telescopePanelRef.current) return;
+    
+    const telescopeRect = telescopePanelRef.current.getBoundingClientRect();
+    const hotspotElements = telescopePanelRef.current.querySelectorAll('[data-hotspot-id]');
+    
+    let droppedOnHotspot: TelescopeHotspot | null = null;
+    
+    hotspotElements.forEach(el => {
+      const rect = el.getBoundingClientRect();
+      // Bırakma koordinatlarının hotspot'un sınırlayıcı kutusu içinde olup olmadığını kontrol et
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        const id = parseInt(el.getAttribute('data-hotspot-id') || '', 10);
+        const hotspotData = telescopeHotspots.find(h => h.id === id);
+        if (hotspotData) {
+            droppedOnHotspot = hotspotData;
+        }
+      }
+    });
+
+    if (droppedOnHotspot) {
+      const newPrompt = `Astrobot'u kullanarak '${droppedOnHotspot.label}' hedefini analiz et.`;
+      setConsolePrompt(newPrompt);
+      addMessageToHistory('model', `// HAL: Astrobot, '${droppedOnHotspot.label}' hedefine yönlendirildi. Komutu onaylayın.`);
+    }
+  };
+
   const imageUrlToBase64 = async (url: string): Promise<{base64: string, mimeType: string}> => {
     if (url.startsWith('data:')) {
       const parts = url.split(',');
@@ -451,7 +547,11 @@ function App() {
   }
   
   if (viewState === 'SETUP_REQUIRED') {
-      return <FirebaseSetupPrompt onContinueOffline={startOfflineMode} />;
+      return <FirebaseSetupPrompt onContinueOffline={() => startOfflineMode(false)} />;
+  }
+  
+  if (viewState === 'PROFILE_SETUP' && firebaseUserForSetup) {
+      return <ProfileSetup user={firebaseUserForSetup} onProfileCreated={handleProfileCreated} isCreating={isCreatingProfile} />;
   }
 
   if (viewState === 'AUTH' || !currentUser) {
@@ -467,20 +567,23 @@ function App() {
   return (
     <main className="h-screen w-screen bg-slate-950 font-mono flex flex-col items-stretch justify-center text-slate-300 p-2 relative overflow-hidden">
         <PlayerAvatar profile={currentUser} onClick={() => setIsProfileModalOpen(true)} />
+        <AstrobotWidget onDrop={handleAstrobotDrop} />
         
         <div className="flex-grow w-full max-w-full mx-auto flex items-stretch gap-2 py-2">
-            <AccordionItem title="TELESKOP" panelId="TELESKOP" isOpen={openPanel === 'TELESKOP'} onToggle={setOpenPanel}>
-              <TelescopeView 
-                imageUrl={telescopeImage} 
-                isGenerating={isProcessing && appState === AppState.GENERATING_IMAGE} 
-                isInitializing={isInitializing} 
-                prompt={telescopePrompt} 
-                interpretedData={interpretedData} 
-                isInterpretingData={isInterpreting}
-                hotspots={telescopeHotspots}
-                onHotspotClick={handleHotspotClick}
-              />
-            </AccordionItem>
+            <div ref={telescopePanelRef} className="flex-grow flex min-w-0">
+                <AccordionItem title="TELESKOP" panelId="TELESKOP" isOpen={openPanel === 'TELESKOP'} onToggle={setOpenPanel}>
+                <TelescopeView 
+                    imageUrl={telescopeImage} 
+                    isGenerating={isProcessing && appState === AppState.GENERATING_IMAGE} 
+                    isInitializing={isInitializing} 
+                    prompt={telescopePrompt} 
+                    interpretedData={interpretedData} 
+                    isInterpretingData={isInterpreting}
+                    hotspots={telescopeHotspots}
+                    onHotspotClick={handleHotspotClick}
+                />
+                </AccordionItem>
+            </div>
             <AccordionItem title="ASTROBOT" panelId="ASTROBOT" isOpen={openPanel === 'ASTROBOT'} onToggle={setOpenPanel}>
               <AstrobotView imageUrl={astrobotImage} isGenerating={isProcessing && appState === AppState.GENERATING_IMAGE} appState={appState} prompt={astrobotPrompt} isAstrobotActive={isAstrobotActive} />
             </AccordionItem>
@@ -496,7 +599,7 @@ function App() {
         </div>
 
         <HalConsole
-          message={lastMessage}
+          message={error ? `// HATA: ${error}` : lastMessage}
           isError={error !== null}
           onGenerate={handleGenerate}
           isProcessing={isProcessing}
@@ -510,7 +613,7 @@ function App() {
           onCancel={() => handleGenerate('hayır')}
         />
         
-        {isFirebaseConfigured && (
+        {isAdmin && (
           <button onClick={() => setIsAdminPanelOpen(true)} className="fixed top-4 left-4 z-40 p-2 bg-slate-800/80 backdrop-blur-sm border border-slate-600 rounded-full text-slate-300 hover:bg-slate-700 hover:text-white transition-all" title="Yönetim Paneli">
               <WifiIcon className="w-5 h-5" />
           </button>
@@ -532,7 +635,6 @@ function App() {
           <MissionCompleteView videoUrl={videoUrl} onNewInvestigation={() => {
               setAppState(AppState.IDLE);
               setVideoUrl(null);
-              // Mission change logic would go here in a multi-mission game
           }} />
         )}
     </main>

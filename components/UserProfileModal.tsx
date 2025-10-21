@@ -17,7 +17,7 @@ const AVATAR_COLORS = ['#00ffff', '#ff00ff', '#ffff00', '#76e1ff', '#fa7ee3', '#
 
 const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClose, onSave }) => {
   const [name, setName] = useState(user.name);
-  const [avatar, setAvatar] = useState(user.avatar);
+  const [avatar, setAvatar] = useState<AvatarProps>(user.avatar);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
@@ -78,7 +78,7 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClose, onSa
                     <label className="block text-sm font-bold text-slate-300 mb-2 tracking-wider">VİZÖR RENGİ</label>
                     <div className="flex gap-2 flex-wrap">
                         {AVATAR_COLORS.map(color => (
-                            <button key={color} onClick={() => setAvatar(a => ({...a, color}))} className={`w-8 h-8 rounded-full border-2 ${avatar.color === color ? 'border-white' : 'border-transparent'}`} style={{backgroundColor: color}} />
+                            <button key={color} type="button" onClick={() => setAvatar(a => ({...a, color}))} className={`w-8 h-8 rounded-full border-2 ${avatar.color === color ? 'border-white' : 'border-transparent'}`} style={{backgroundColor: color}} aria-label={`Renk seç: ${color}`} />
                         ))}
                     </div>
                 </div>
