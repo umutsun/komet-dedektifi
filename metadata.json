@@ -1,0 +1,8 @@
+{
+  "name": "Comet Detective",
+  "description": "Herhangi bir sahneyi tanımlayın ve saniyeler içinde çarpıcı bir video elde edin. Veo tarafından desteklenen zahmetsiz bir video oluşturucu.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "prompt": ""
+}

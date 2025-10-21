@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KOMET DEDEKTİFİ</title>
+    <script>
+      // This placeholder will be replaced by the entrypoint script with the actual API key
+      window.process = { env: { API_KEY: __API_KEY_PLACEHOLDER__ } };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Space Mono', monospace;
+        }
+        .panel-corners {
+            position: relative;
+        }
+        .panel-corners::before, .panel-corners::after {
+            content: '';
+            position: absolute;
+            width: 16px; height: 16px;
+            border-style: solid;
+            border-color: #4b5563; /* slate-600 */
+        }
+        .panel-corners::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+        .panel-corners::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+        
+        @keyframes scan { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+        .animate-scan { animation: scan 2s linear infinite; }
+
+        @keyframes float { 0% { transform: translate(0, 0px); } 50% { transform: translate(0, var(--float-offset, -8px)); } 100% { transform: translate(0, 0px); } }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        
+        @keyframes drift { 0% { transform: translate(0, 0) rotate(0deg); } 25% { transform: translate(5px, -5px) rotate(5deg); } 50% { transform: translate(0px, 0px) rotate(0deg); } 75% { transform: translate(-5px, 5px) rotate(-5deg); } 100% { transform: translate(0, 0) rotate(0deg); } }
+        .animate-drift { animation: drift 10s ease-in-out infinite; }
+
+        @keyframes code-pulse { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.8; } }
+        .animate-code-pulse { animation: code-pulse var(--duration, 2s) var(--delay, 0s) infinite ease-in-out; }
+        
+        @keyframes blink-caret { from, to { opacity: 1; } 50% { opacity: 0; } }
+        .animate-blink { animation: blink-caret 0.8s step-end infinite; }
+        
+        @keyframes glow-bg { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(59, 130, 246, 0.1); } }
+        .animate-glow-bg { animation: glow-bg 2s infinite ease-in-out; }
+        
+        @keyframes blue-glow { 0%, 100% { box-shadow: 0 0 8px rgba(96, 165, 250, 0.6), 0 0 12px rgba(96, 165, 250, 0.5); } 50% { box-shadow: 0 0 16px rgba(96, 165, 250, 0.9), 0 0 24px rgba(96, 165, 250, 0.8); } }
+        .animate-blue-glow { animation: blue-glow 1.5s infinite ease-in-out; }
+        
+        @keyframes mic-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+        .animate-mic-pulse { animation: mic-pulse 1.5s infinite ease-in-out; }
+
+        @keyframes mic-glow {
+            0%, 100% { box-shadow: 0 0 4px rgba(248, 113, 113, 0.5), 0 0 6px rgba(248, 113, 113, 0.3); }
+            50% { box-shadow: 0 0 12px rgba(248, 113, 113, 0.8), 0 0 16px rgba(248, 113, 113, 0.6); }
+        }
+        .animate-mic-glow {
+            animation: mic-glow 1.5s infinite ease-in-out;
+        }
+
+        @keyframes transmit {
+            from { stroke-dashoffset: 0; }
+            to { stroke-dashoffset: -20; }
+        }
+        .animate-transmit {
+            stroke-dasharray: 4 2;
+            animation: transmit 1s linear infinite;
+        }
+
+        /* HAL Minimized Cube Styles */
+        .scene {
+          width: 40px; /* w-10 */
+          height: 40px; /* h-10 */
+          perspective: 200px;
+        }
+        
+        .cube {
+          width: 100%;
+          height: 100%;
+          position: relative;
+          transform-style: preserve-3d;
+          transform: translateZ(-20px);
+        }
+        
+        .animate-rotate-cube {
+          animation: rotate-cube 12s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+        }
+        .animate-rotate-cube-fast {
+          animation: rotate-cube-fast 6s linear infinite;
+        }
+        
+        .face {
+          position: absolute;
+          width: 40px;
+          height: 40px;
+          border: 1px solid rgba(59, 130, 246, 0.5); /* border-blue-500/50 */
+          background: rgba(15, 23, 42, 0.6); /* bg-slate-900/60 */
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .face::before {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #f87171; /* red-400 */
+            border-radius: 50%;
+            box-shadow: 0 0 10px #f87171, 0 0 15px #f87171;
+            animation: pulse-red 2s infinite ease-in-out;
+        }
+        
+        @keyframes pulse-red {
+            0%, 100% { transform: scale(0.8); opacity: 0.7; }
+            50% { transform: scale(1); opacity: 1; }
+        }
+        
+        .front  { transform: rotateY(  0deg) translateZ(20px); }
+        .back   { transform: rotateY(180deg) translateZ(20px); }
+        .right  { transform: rotateY( 90deg) translateZ(20px); }
+        .left   { transform: rotateY(-90deg) translateZ(20px); }
+        .top    { transform: rotateX( 90deg) translateZ(20px); }
+        .bottom { transform: rotateX(-90deg) translateZ(20px); }
+        
+        @keyframes rotate-cube {
+          0% { transform: translateZ(-20px) rotateX(0deg) rotateY(0deg); }
+          100% { transform: translateZ(-20px) rotateX(360deg) rotateY(360deg); }
+        }
+        
+        @keyframes rotate-cube-fast {
+          0% { transform: translateZ(-20px) rotateX(0deg) rotateY(0deg); }
+          100% { transform: translateZ(-20px) rotateX(720deg) rotateY(1080deg); }
+        }
+
+        /* Custom Scrollbar Styles - Hides scrollbar but allows scrolling */
+        .custom-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+          display: none; /* Chrome, Safari and Opera */
+        }
+        
+        /* Starfield Animation */
+        @keyframes star-travel-1 {
+            from { background-position: 0 0; }
+            to { background-position: 0 -256px; }
+        }
+        @keyframes star-travel-2 {
+            from { background-position: 0 0; }
+            to { background-position: 0 -512px; }
+        }
+        @keyframes star-travel-3 {
+            from { background-position: 0 0; }
+            to { background-position: 0 -1024px; }
+        }
+        .starfield {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+        }
+        .stars {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-repeat: repeat;
+            animation-timing-function: linear;
+            animation-iteration-count: infinite;
+        }
+        .stars-1 {
+            background-image: radial-gradient(1px 1px at 25px 25px, #fff, transparent);
+            background-size: 50px 50px;
+            animation: star-travel-1 150s linear infinite;
+        }
+        .stars-2 {
+            background-image: radial-gradient(1px 1px at 35px 35px, #fff, transparent);
+            background-size: 80px 80px;
+            animation: star-travel-2 100s linear infinite;
+        }
+        .stars-3 {
+            background-image: radial-gradient(2px 2px at 50px 50px, #fff, transparent);
+            background-size: 120px 120px;
+            animation: star-travel-3 50s linear infinite;
+        }
+        
+        /* HUD animations */
+        @keyframes scanline-anim {
+            0% { transform: translateY(0%); }
+            100% { transform: translateY(100%); }
+        }
+        
+        @keyframes hotspot-pulse {
+            0%, 100% { transform: scale(0.95); opacity: 0.7; box-shadow: 0 0 0 0 rgba(0, 255, 255, 0.7); }
+            70% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 8px 12px rgba(0, 255, 255, 0); }
+            100% { transform: scale(0.95); opacity: 0.7; box-shadow: 0 0 0 0 rgba(0, 255, 255, 0); }
+        }
+        
+        @keyframes blue-dot-blink {
+            0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 6px 2px rgba(96, 165, 250, 0.5); }
+            50% { opacity: 0.6; transform: scale(0.8); box-shadow: 0 0 10px 4px rgba(96, 165, 250, 0.3); }
+        }
+        .animate-blue-dot-blink { animation: blue-dot-blink 2.5s infinite ease-in-out; }
+
+    </style>
+</head>
+<body class="bg-slate-950">
+    <div id="root"></div>
+    <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.25.0",
+    "firebase/app": "https://aistudiocdn.com/firebase@^12.4.0/app",
+    "firebase/firestore": "https://aistudiocdn.com/firebase@^12.4.0/firestore",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.4.0/",
+    "three": "https://aistudiocdn.com/three@^0.167.0"
+  }
+}
+</script>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>
